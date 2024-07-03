@@ -32,7 +32,7 @@ namespace WatchDog.src
             Serializer = options.Serializer;
             WatchDogConfigModel.UserName = _options.WatchPageUsername;
             WatchDogConfigModel.Password = _options.WatchPagePassword;
-            WatchDogConfigModel.Blacklist = String.IsNullOrEmpty(_options.Blacklist) ? new string[] { } : _options.Blacklist.Replace(" ", string.Empty).Split(',');
+            WatchDogConfigModel.Blacklist = string.IsNullOrEmpty(_options.Blacklist) ? [] : _options.Blacklist.Replace(" ", string.Empty).Split(',');
         }
 
         public async Task InvokeAsync(HttpContext context)
@@ -112,42 +112,38 @@ namespace WatchDog.src
 
         private async Task<ResponseModel> LogResponse(HttpContext context)
         {
-            using (var originalBodyStream = context.Response.Body)
+            using var originalBodyStream = context.Response.Body;
+            try
             {
-                try
+                using var originalResponseBody = _recyclableMemoryStreamManager.GetStream();
+                context.Response.Body = originalResponseBody;
+                await _next(context);
+                context.Response.Body.Seek(0, SeekOrigin.Begin);
+                var responseBody = await new StreamReader(context.Response.Body).ReadToEndAsync();
+                context.Response.Body.Seek(0, SeekOrigin.Begin);
+                var responseBodyDto = new ResponseModel
                 {
-                    using (var originalResponseBody = _recyclableMemoryStreamManager.GetStream())
-                    {
-                        context.Response.Body = originalResponseBody;
-                        await _next(context);
-                        context.Response.Body.Seek(0, SeekOrigin.Begin);
-                        var responseBody = await new StreamReader(context.Response.Body).ReadToEndAsync();
-                        context.Response.Body.Seek(0, SeekOrigin.Begin);
-                        var responseBodyDto = new ResponseModel
-                        {
-                            ResponseBody = responseBody,
-                            ResponseStatus = context.Response.StatusCode,
-                            FinishTime = DateTime.Now,
-                            Headers = context.Response.Headers.ContentLength > 0 ? context.Response.Headers.Select(x => x.ToString()).Aggregate((a, b) => a + ": " + b) : string.Empty,
-                        };
-                        await originalResponseBody.CopyToAsync(originalBodyStream);
-                        return responseBodyDto;
-                    }
-                }
-                catch (OutOfMemoryException ex)
+                    ResponseBody = responseBody,
+                    ResponseStatus = context.Response.StatusCode,
+                    FinishTime = DateTime.Now,
+                    Headers = context.Response.Headers.ContentLength > 0 ? context.Response.Headers.Select(x => x.ToString()).Aggregate((a, b) => a + ": " + b) : string.Empty,
+                };
+                await originalResponseBody.CopyToAsync(originalBodyStream);
+                return responseBodyDto;
+            }
+            catch (OutOfMemoryException ex)
+            {
+                return new ResponseModel
                 {
-                    return new ResponseModel
-                    {
-                        ResponseBody = "OutOfMemoryException occured while trying to read response body",
-                        ResponseStatus = context.Response.StatusCode,
-                        FinishTime = DateTime.Now,
-                        Headers = context.Response.Headers.ContentLength > 0 ? context.Response.Headers.Select(x => x.ToString()).Aggregate((a, b) => a + ": " + b) : string.Empty,
-                    };
-                }
-                finally
-                {
-                    context.Response.Body = originalBodyStream;
-                }
+                    ResponseBody = "OutOfMemoryException occured while trying to read response body",
+                    ResponseStatus = context.Response.StatusCode,
+                    FinishTime = DateTime.Now,
+                    Headers = context.Response.Headers.ContentLength > 0 ? context.Response.Headers.Select(x => x.ToString()).Aggregate((a, b) => a + ": " + b) : string.Empty,
+                };
+            }
+            finally
+            {
+                context.Response.Body = originalBodyStream;
             }
         }
 

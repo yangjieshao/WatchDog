@@ -11,7 +11,12 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddOutputCache();
 //builder.Services.AddWatchDogServices();
-builder.Services.AddWatchDogServices(opt => { opt.IsAutoClear = true; opt.SetExternalDbConnString = "Server=(localdb)\\mssqllocaldb;Database=test;Trusted_Connection=True;"; opt.DbDriverOption = WatchDogDbDriverEnum.MSSQL; });
+builder.Services.AddWatchDogServices(opt => 
+{
+    opt.IsAutoClear = true; 
+    //opt.SetExternalDbConnString = "Server=(localdb)\\mssqllocaldb;Database=test;Trusted_Connection=True;"; 
+    //opt.DbDriverOption = WatchDogDbDriverEnum.MSSQL; 
+});
 
 var app = builder.Build();
 
